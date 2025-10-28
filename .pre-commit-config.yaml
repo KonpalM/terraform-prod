@@ -1,0 +1,11 @@
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.88.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+  - repo: https://github.com/aquasecurity/tfsec
+    rev: v1.28.10
+    hooks:
+      - id: tfsec
+        args: ["--no-color","--concise-output"]
