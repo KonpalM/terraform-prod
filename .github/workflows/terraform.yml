@@ -1,0 +1,118 @@
+name: Terraform Pipeline
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  id-token: write     # OIDC: allows requesting a GitHub OIDC token
+  contents: read      # required to checkout the repo
+
+env:
+  AWS_REGION: eu-west-2
+  ROLE_ARN: arn:aws:iam::260287420057:role/GithubTerraformRole
+  TF_WORKING_DIR: envs/nonprod        # default; switch to envs/prod on release
+
+jobs:
+  validate_and_plan:
+    name: Validate + tfsec + Plan (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC assume role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}   # no static keys, uses OIDC
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false -upgrade
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Install tfsec
+        run: |
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.10/tfsec-linux-amd64 -o /usr/local/bin/tfsec
+          chmod +x /usr/local/bin/tfsec
+
+      - name: Run tfsec (PR: soft fail → dev can iterate)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          set +e
+          tfsec --no-color --format=stylish || TFSEC_FAIL=$?
+          tfsec --no-color --format=json > ../tfsec-report.json || true
+          tfsec --no-color --format=sarif > ../tfsec-report.sarif || true
+          echo "tfsec exit code: ${TFSEC_FAIL:-0}"
+          exit 0
+        # ↑ we always exit 0 on PR: show findings but don't block iteration
+
+      - name: Terraform plan
+        id: plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Upload plan & tfsec artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-and-security
+          path: |
+            ${{ env.TF_WORKING_DIR }}/tfplan
+            tfsec-report.json
+            tfsec-report.sarif
+
+  apply_main:
+    name: Apply (Main) with Hard Gates
+    runs-on: ubuntu-latest
+    needs: validate_and_plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production        # GitHub “Environments” → can require manual approval
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC assume role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false -upgrade
+
+      - name: Install tfsec
+        run: |
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.10/tfsec-linux-amd64 -o /usr/local/bin/tfsec
+          chmod +x /usr/local/bin/tfsec
+
+      - name: Run tfsec (Main: HARD FAIL)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: tfsec --no-color   # any finding → non-zero exit → block deploy
+
+      - name: Terraform apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -input=false -auto-approve
