@@ -10,7 +10,7 @@ terraform {
 
 provider "aws" { region = "us-east-1" }
 
-resource "aws_s3_bucket" "demo" {
+resource "aws_s3_bucket_acl" "demo" {
   bucket = "konpal-nonprod-demo-12345"
   acl    = "public-read"
 }
