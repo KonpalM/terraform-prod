@@ -56,12 +56,14 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           set +e
-          tfsec --no-color --format=stylish || TFSEC_FAIL=$?
+          echo "Running tfsec in $(pwd)"
+          tfsec --no-color --format=text || TFSEC_FAIL=$?
           tfsec --no-color --format=json > ../tfsec-report.json || true
           tfsec --no-color --format=sarif > ../tfsec-report.sarif || true
           echo "tfsec exit code: ${TFSEC_FAIL:-0}"
           exit 0
         # ↑ we always exit 0 on PR: show findings but don't block iteration
+
 
       - name: Terraform plan
         id: plan
