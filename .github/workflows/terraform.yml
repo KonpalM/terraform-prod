@@ -111,8 +111,8 @@ jobs:
 
       - name: Run tfsec
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: tfsec --no-color   # any finding → non-zero exit → block deploy
-
+        run: tfsec --no-color 
+        
       - name: Terraform apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -input=false -auto-approve
