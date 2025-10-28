@@ -1,6 +1,8 @@
+# Unsafe bucket
+
 terraform {
   backend "s3" {
-    bucket         = "konpal-tf-state-bucket-12345"  # from backend step
+    bucket         = "konpal-tf-state-bucket-123456"  # from backend step
     key            = "nonprod/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "konpal-tf-locks"
