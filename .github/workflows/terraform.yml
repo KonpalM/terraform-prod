@@ -52,7 +52,7 @@ jobs:
           curl -sSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.10/tfsec-linux-amd64 -o /usr/local/bin/tfsec
           chmod +x /usr/local/bin/tfsec
 
-      - name: Run tfsec (PR: soft fail → dev can iterate)
+      - name: Run tfsec
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           set +e
